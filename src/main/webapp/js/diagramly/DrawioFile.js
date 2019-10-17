@@ -846,9 +846,29 @@ DrawioFile.prototype.updateFileData = function()
  * @param {number} dx X-coordinate of the translation.
  * @param {number} dy Y-coordinate of the translation.
  */
+DrawioFile.prototype.isCompressedStorage = function()
+{
+	return true;
+};
+
+/**
+ * Translates this point by the given vector.
+ * 
+ * @param {number} dx X-coordinate of the translation.
+ * @param {number} dy Y-coordinate of the translation.
+ */
 DrawioFile.prototype.isCompressed = function()
 {
-	return (this.ui.fileNode != null) ? this.ui.fileNode.getAttribute('compressed') != 'false' : true;
+	var compressed = (this.ui.fileNode != null) ? this.ui.fileNode.getAttribute('compressed') : null;
+	
+	if (compressed != null)
+	{
+		return compressed != 'false';
+	}
+	else
+	{
+		return this.isCompressedStorage() && Editor.compressXml;
+	}
 };
 
 /**
@@ -1172,6 +1192,22 @@ DrawioFile.prototype.getLastModifiedDate = function()
 };
 
 /**
+ * Sets the current revision ID.
+ */
+DrawioFile.prototype.setCurrentRevisionId = function(id)
+{
+	this.setDescriptorRevisionId(this.getDescriptor(), id);
+};
+
+/**
+ * Returns the current revision ID.
+ */
+DrawioFile.prototype.getCurrentRevisionId = function()
+{
+	return this.getDescriptorRevisionId(this.getDescriptor());
+};
+
+/**
  * Sets the current etag.
  */
 DrawioFile.prototype.setCurrentEtag = function(etag)
@@ -1199,6 +1235,22 @@ DrawioFile.prototype.getDescriptor = function()
  * Sets the descriptor for this file.
  */
 DrawioFile.prototype.setDescriptor = function() { };
+
+/**
+ * Updates the revision ID on the given descriptor.
+ */
+DrawioFile.prototype.setDescriptorRevisionId = function(desc, id)
+{
+	this.setDescriptorEtag(desc, id);
+};
+
+/**
+ * Returns the revision ID from the given descriptor.
+ */
+DrawioFile.prototype.getDescriptorRevisionId = function(desc)
+{
+	return this.getDescriptorEtag(desc);
+};
 
 /**
  * Updates the etag on the given descriptor.

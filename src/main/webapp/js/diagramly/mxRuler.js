@@ -19,7 +19,7 @@
 
 function mxRuler(editorUi, unit, isVertical, isSecondery) 
 {
-	var RULER_THICKNESS = 14;
+	var RULER_THICKNESS = this.RULER_THICKNESS;
     var ruler = this;
     this.unit = unit;
     var style = window.uiTheme != 'dark'? {
@@ -49,45 +49,23 @@ function mxRuler(editorUi, unit, isVertical, isSecondery)
 	
 	function resizeRulerContainer()
 	{
-	    container.style.top = editorUi.origContTop + 'px';
-	    container.style.left = editorUi.origContLeft + 'px';
-	    container.style.width = (isVertical? RULER_THICKNESS : editorUi.origContWidth) + 'px';
-	    container.style.height = (isVertical? editorUi.origContHeight : RULER_THICKNESS) + 'px';
+		var diagCont = editorUi.diagramContainer;
+		
+	    container.style.top = (diagCont.offsetTop - RULER_THICKNESS) + 'px';
+	    container.style.left = (diagCont.offsetLeft - RULER_THICKNESS) + 'px';
+	    container.style.width = ((isVertical? 0 : diagCont.offsetWidth) + RULER_THICKNESS) + 'px';
+	    container.style.height = ((isVertical? diagCont.offsetHeight : 0) + RULER_THICKNESS) + 'px';
 	};
     
 	this.editorUiRefresh = editorUi.refresh;
 	
 	editorUi.refresh = function(minor)
 	{
-		//If it is called with true, then only our added code is executed
-		if (minor != true) 
-		{
-			ruler.editorUiRefresh.apply(editorUi, arguments);
-		}
-		
-		var cont = editorUi.diagramContainer;
-		
-		if (!isSecondery)
-		{
-			editorUi.origContTop = cont.offsetTop;
-			editorUi.origContLeft = cont.offsetLeft;
-			editorUi.origContWidth = cont.offsetWidth;
-			editorUi.origContHeight = cont.offsetHeight;
-		}
+		ruler.editorUiRefresh.apply(editorUi, arguments);
 		
 		resizeRulerContainer();
-		
-		if (isVertical)
-		{
-			cont.style.left = (cont.offsetLeft + RULER_THICKNESS) + 'px';
-		}
-		else
-		{
-			cont.style.top = (cont.offsetTop + RULER_THICKNESS) + 'px';
-		}
 	};
 
-	editorUi.refresh(true);
 	resizeRulerContainer();
     	
     var canvas = document.createElement('canvas');
@@ -351,69 +329,99 @@ function mxRuler(editorUi, unit, isVertical, isSecondery)
     	drawRuler();
     }
     
-    //Showing guides on cell move
+    // Showing guides on cell move
     this.origGuideMove = mxGuide.prototype.move;
 	
 	mxGuide.prototype.move = function (bounds, delta, gridEnabled, clone)
 	{
-		if (ruler.guidePart != null)
-		{
-			ctx.putImageData(ruler.guidePart.imgData1, ruler.guidePart.x1, ruler.guidePart.y1);	
-			ctx.putImageData(ruler.guidePart.imgData2, ruler.guidePart.x2, ruler.guidePart.y2);	
-			ctx.putImageData(ruler.guidePart.imgData3, ruler.guidePart.x3, ruler.guidePart.y3);	
-		}
+		var ret = null;
 		
-		var ret = ruler.origGuideMove.apply(this, arguments);
-
-		var x1, y1, imgData1, x2, y2, imgData2, x3, y3, imgData3;
-		ctx.lineWidth = 0.5;
-        ctx.strokeStyle = style.guideClr;
-        ctx.setLineDash([2]);
-
-        if (isVertical)
+		// LATER: Fix repaint for width and height < 5
+		if ((isVertical && bounds.height > 4) || (!isVertical && bounds.width > 4))
 		{
-			y1 = bounds.y + ret.y + RULER_THICKNESS - this.graph.container.scrollTop;
-			x1 = 0;
-			y2 = y1 + bounds.height / 2;
-			x2 = RULER_THICKNESS / 2;
-			y3 = y1 + bounds.height;
-			x3 = 0;
-			imgData1 = ctx.getImageData(x1, y1, RULER_THICKNESS, 5);
-			drawLine(x1, y1, RULER_THICKNESS, y1);
-			imgData2 = ctx.getImageData(x2, y2, RULER_THICKNESS, 5);
-			drawLine(x2, y2, RULER_THICKNESS, y2);
-			imgData3 = ctx.getImageData(x3, y3, RULER_THICKNESS, 5);
-			drawLine(x3, y3, RULER_THICKNESS, y3);
+			if (ruler.guidePart != null)
+			{
+				try
+				{
+					ctx.putImageData(ruler.guidePart.imgData1, ruler.guidePart.x1, ruler.guidePart.y1);	
+					ctx.putImageData(ruler.guidePart.imgData2, ruler.guidePart.x2, ruler.guidePart.y2);	
+					ctx.putImageData(ruler.guidePart.imgData3, ruler.guidePart.x3, ruler.guidePart.y3);
+				}
+				catch (e)
+				{
+					// ignore
+				}
+			}
+			
+			ret = ruler.origGuideMove.apply(this, arguments);
+	
+			try
+			{
+				var x1, y1, imgData1, x2, y2, imgData2, x3, y3, imgData3;
+				ctx.lineWidth = 0.5;
+		        ctx.strokeStyle = style.guideClr;
+		        ctx.setLineDash([2]);
+		
+		        if (isVertical)
+				{
+					y1 = bounds.y + ret.y + RULER_THICKNESS - this.graph.container.scrollTop;
+					x1 = 0;
+					y2 = y1 + bounds.height / 2;
+					x2 = RULER_THICKNESS / 2;
+					y3 = y1 + bounds.height;
+					x3 = 0;
+					imgData1 = ctx.getImageData(x1, y1 - 1, RULER_THICKNESS, 3);
+					drawLine(x1, y1, RULER_THICKNESS, y1);
+					y1--;
+					imgData2 = ctx.getImageData(x2, y2 - 1, RULER_THICKNESS, 3);
+					drawLine(x2, y2, RULER_THICKNESS, y2);
+					y2--;
+					imgData3 = ctx.getImageData(x3, y3 - 1, RULER_THICKNESS, 3);
+					drawLine(x3, y3, RULER_THICKNESS, y3);
+					y3--;
+				}
+				else
+				{
+					y1 = 0;
+					x1 = bounds.x + ret.x + RULER_THICKNESS - this.graph.container.scrollLeft;
+					y2 = RULER_THICKNESS / 2;
+					x2 = x1 + bounds.width / 2;
+					y3 = 0;
+					x3 = x1 + bounds.width;
+					imgData1 = ctx.getImageData(x1 - 1, y1, 3, RULER_THICKNESS);
+					drawLine(x1, y1, x1, RULER_THICKNESS);
+					x1--;
+					imgData2 = ctx.getImageData(x2 - 1, y2, 3, RULER_THICKNESS);
+					drawLine(x2, y2, x2, RULER_THICKNESS);
+					x2--;
+					imgData3 = ctx.getImageData(x3 - 1, y3, 3, RULER_THICKNESS);
+					drawLine(x3, y3, x3, RULER_THICKNESS);
+					x3--;
+				}
+				
+				if (ruler.guidePart == null || ruler.guidePart.x1 != x1 || ruler.guidePart.y1 != y1)
+				{
+					ruler.guidePart = { 
+						imgData1: imgData1,
+						x1: x1,
+						y1: y1,
+						imgData2: imgData2,
+						x2: x2,
+						y2: y2,
+						imgData3: imgData3,
+						x3: x3,
+						y3: y3
+					}	
+				}
+			}
+			catch (e)
+			{
+				// ignore
+			}
 		}
 		else
 		{
-			y1 = 0;
-			x1 = bounds.x + ret.x + RULER_THICKNESS - this.graph.container.scrollLeft;
-			y2 = RULER_THICKNESS / 2;
-			x2 = x1 + bounds.width / 2;
-			y3 = 0;
-			x3 = x1 + bounds.width;
-			imgData1 = ctx.getImageData(x1 , y1, 5, RULER_THICKNESS);
-			drawLine(x1, y1, x1, RULER_THICKNESS);
-			imgData2 = ctx.getImageData(x2 , y2, 5, RULER_THICKNESS);
-			drawLine(x2, y2, x2, RULER_THICKNESS);
-			imgData3 = ctx.getImageData(x3 , y3, 5, RULER_THICKNESS);
-			drawLine(x3, y3, x3, RULER_THICKNESS);
-		}
-		
-		if (ruler.guidePart == null || ruler.guidePart.x1 != x1 || ruler.guidePart.y1 != y1)
-		{
-			ruler.guidePart = { 
-				imgData1: imgData1,
-				x1: x1,
-				y1: y1,
-				imgData2: imgData2,
-				x2: x2,
-				y2: y2,
-				imgData3: imgData3,
-				x3: x3,
-				y3: y3
-			}	
+			ret = ruler.origGuideMove.apply(this, arguments);
 		}
 		
 		return ret;
@@ -427,16 +435,24 @@ function mxRuler(editorUi, unit, isVertical, isSecondery)
 		
 		if (ruler.guidePart != null)
 		{
-			ctx.putImageData(ruler.guidePart.imgData1, ruler.guidePart.x1, ruler.guidePart.y1);	
-			ctx.putImageData(ruler.guidePart.imgData2, ruler.guidePart.x2, ruler.guidePart.y2);	
-			ctx.putImageData(ruler.guidePart.imgData3, ruler.guidePart.x3, ruler.guidePart.y3);
-			ruler.guidePart = null;
+			try
+			{
+				ctx.putImageData(ruler.guidePart.imgData1, ruler.guidePart.x1, ruler.guidePart.y1);	
+				ctx.putImageData(ruler.guidePart.imgData2, ruler.guidePart.x2, ruler.guidePart.y2);	
+				ctx.putImageData(ruler.guidePart.imgData3, ruler.guidePart.x3, ruler.guidePart.y3);
+				ruler.guidePart = null;
+			}
+			catch (e)
+			{
+				// ignore
+			}
 		}
 		
 		return ret;
 	};
 };
 
+mxRuler.prototype.RULER_THICKNESS = 14;
 mxRuler.prototype.unit = mxConstants.POINTS;
 
 mxRuler.prototype.setUnit = function(unit) 
@@ -474,13 +490,18 @@ mxRuler.prototype.destroy = function()
     {
     	this.container.parentNode.removeChild(this.container);
     }
-    
-	this.ui.diagramContainer.style.left = this.ui.origContLeft + 'px';
-	this.ui.diagramContainer.style.top = this.ui.origContTop + 'px';
 };
 
 function mxDualRuler(editorUi, unit)
 {
+	var rulerOffset = new mxPoint(mxRuler.prototype.RULER_THICKNESS, mxRuler.prototype.RULER_THICKNESS);
+	this.editorUiGetDiagContOffset = editorUi.getDiagramContainerOffset;
+
+	editorUi.getDiagramContainerOffset = function()
+	{
+		return rulerOffset;
+	};
+
 	this.editorUiRefresh = editorUi.refresh;
 	this.ui = editorUi;
 	this.origGuideMove = mxGuide.prototype.move;
@@ -563,4 +584,5 @@ mxDualRuler.prototype.destroy = function()
 	this.ui.refresh = this.editorUiRefresh;
 	mxGuide.prototype.move = this.origGuideMove;
 	mxGuide.prototype.destroy = this.origGuideDestroy;
+	this.ui.getDiagramContainerOffset = this.editorUiGetDiagContOffset;
 };

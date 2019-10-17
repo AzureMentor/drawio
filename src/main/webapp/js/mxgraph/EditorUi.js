@@ -972,7 +972,7 @@ EditorUi.compactUi = true;
 EditorUi.prototype.splitSize = (mxClient.IS_TOUCH || mxClient.IS_POINTER) ? 12 : 8;
 
 /**
- * Specifies the height of the menubar. Default is 34.
+ * Specifies the height of the menubar. Default is 30.
  */
 EditorUi.prototype.menubarHeight = 30;
 
@@ -1013,12 +1013,12 @@ EditorUi.prototype.hsplitPosition = (screen.width <= 640) ? 118 : ((urlParams['s
 EditorUi.prototype.allowAnimation = true;
 
 /**
- * Specifies if animations are allowed in <executeLayout>. Default is true.
+ * Default is 2.
  */
 EditorUi.prototype.lightboxMaxFitScale = 2;
 
 /**
- * Specifies if animations are allowed in <executeLayout>. Default is true.
+ * Default is 4.
  */
 EditorUi.prototype.lightboxVerticalDivider = 4;
 
@@ -1116,7 +1116,7 @@ EditorUi.prototype.onKeyPress = function(evt)
 	
 	// KNOWN: Focus does not work if label is empty in quirks mode
 	if (this.isImmediateEditingEvent(evt) && !graph.isEditing() && !graph.isSelectionEmpty() && evt.which !== 0 &&
-		!mxEvent.isAltDown(evt) && !mxEvent.isControlDown(evt) && !mxEvent.isMetaDown(evt))
+		evt.which !== 27 && !mxEvent.isAltDown(evt) && !mxEvent.isControlDown(evt) && !mxEvent.isMetaDown(evt))
 	{
 		graph.escape();
 		graph.startEditing();
@@ -2973,6 +2973,13 @@ EditorUi.prototype.updateActionStates = function()
     this.updatePasteActionStates();
 };
 
+EditorUi.prototype.zeroOffset = new mxPoint(0, 0);
+
+EditorUi.prototype.getDiagramContainerOffset = function()
+{
+	return this.zeroOffset;
+};
+
 /**
  * Refreshes the viewport.
  */
@@ -3043,8 +3050,10 @@ EditorUi.prototype.refresh = function(sizeDidChange)
 	this.formatContainer.style.width = fw + 'px';
 	this.formatContainer.style.display = (this.format != null) ? '' : 'none';
 	
-	this.diagramContainer.style.left = (this.hsplit.parentNode != null) ? (effHsplitPosition + this.splitSize) + 'px' : '0px';
-	this.diagramContainer.style.top = this.sidebarContainer.style.top;
+	var diagContOffset = this.getDiagramContainerOffset();
+	var contLeft = (this.hsplit.parentNode != null) ? (effHsplitPosition + this.splitSize) : 0;
+	this.diagramContainer.style.left =  (contLeft + diagContOffset.x) + 'px';
+	this.diagramContainer.style.top = (tmp + diagContOffset.y) + 'px';
 	this.footerContainer.style.height = this.footerHeight + 'px';
 	this.hsplit.style.top = this.sidebarContainer.style.top;
 	this.hsplit.style.bottom = (this.footerHeight + off) + 'px';
@@ -3053,7 +3062,7 @@ EditorUi.prototype.refresh = function(sizeDidChange)
 	
 	if (this.tabContainer != null)
 	{
-		this.tabContainer.style.left = this.diagramContainer.style.left;
+		this.tabContainer.style.left = contLeft + 'px';
 	}
 	
 	if (quirks)

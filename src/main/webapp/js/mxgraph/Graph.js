@@ -13,6 +13,30 @@ if (typeof html4 !== 'undefined')
 	//html4.ATTRIBS["video::autobuffer"] = 0;
 }
 
+// Workaround for handling named HTML entities in mxUtils.parseXml
+// LATER: How to configure DOMParser to just ignore all entities?
+(function()
+{
+	var entities = [
+		['nbsp', '160'],
+		['shy', '173']
+    ];
+
+	var parseXml = mxUtils.parseXml;
+	
+	mxUtils.parseXml = function(text)
+	{
+		for (var i = 0; i < entities.length; i++)
+	    {
+	        text = text.replace(new RegExp(
+	        	'&' + entities[i][0] + ';', 'g'),
+		        '&#' + entities[i][1] + ';');
+	    }
+
+		return parseXml(text);
+	};
+})();
+
 // Shim for missing toISOString in older versions of IE
 // See https://stackoverflow.com/questions/12907862
 if (!Date.prototype.toISOString)
@@ -105,7 +129,8 @@ mxGraphView.prototype.gridSteps = 4;
 mxGraphView.prototype.minGridSize = 4;
 
 // UrlParams is null in embed mode
-mxGraphView.prototype.gridColor = '#e0e0e0';
+mxGraphView.prototype.defaultGridColor = '#e0e0e0';
+mxGraphView.prototype.gridColor = mxGraphView.prototype.defaultGridColor;
 
 //Units
 mxGraphView.prototype.unit = mxConstants.POINTS;
@@ -1077,8 +1102,8 @@ Graph.compress = function(data, deflate)
 	}
 	else
 	{
-   		var tmp = Graph.bytesToString((deflate) ? pako.deflate(encodeURIComponent(data)) :
-   			pako.deflateRaw(encodeURIComponent(data)));
+   		var tmp = (deflate) ? pako.deflate(encodeURIComponent(data), {to: 'string'}) :
+   			pako.deflateRaw(encodeURIComponent(data), {to: 'string'});
    		
    		return (window.btoa) ? btoa(tmp) : Base64.encode(tmp, true);
 	}
@@ -1097,9 +1122,10 @@ Graph.decompress = function(data, inflate)
 	{
 		var tmp = (window.atob) ? atob(data) : Base64.decode(data, true);
 		
-		return Graph.zapGremlins(decodeURIComponent(
-			Graph.bytesToString((inflate) ? pako.inflate(tmp) :
-				pako.inflateRaw(tmp))));
+		var inflated = (inflate) ? pako.inflate(tmp, {to: 'string'}) :
+			pako.inflateRaw(tmp, {to: 'string'})
+
+		return Graph.zapGremlins(decodeURIComponent(inflated));
 	}
 };
 
@@ -1837,6 +1863,14 @@ Graph.prototype.initLayoutManager = function()
 				flowLayout.parallelEdgeSpacing = mxUtils.getValue(style, 'parallelEdgeSpacing', mxHierarchicalLayout.prototype.parallelEdgeSpacing);
 				
 				return flowLayout;
+			}
+			else if (style['childLayout'] == 'circleLayout')
+			{
+				return new mxCircleLayout(this.graph);
+			}
+			else if (style['childLayout'] == 'organicLayout')
+			{
+				return new mxFastOrganicLayout(this.graph);
 			}
 		}
 		
@@ -8159,6 +8193,7 @@ if (typeof mxVertexHandler != 'undefined')
 		mxVertexHandler.prototype.rotationEnabled = true;
 		mxVertexHandler.prototype.manageSizers = true;
 		mxVertexHandler.prototype.livePreview = true;
+		mxGraphHandler.prototype.maxLivePreview = 16;
 	
 		// Increases default rubberband opacity (default is 20)
 		mxRubberband.prototype.defaultOpacity = 30;
@@ -8551,7 +8586,8 @@ if (typeof mxVertexHandler != 'undefined')
 				{
 					var state = this.graph.view.getState(cells[0]);
 					
-					if (state != null && state.width < 2 && state.height < 2 && state.text != null && state.text.boundingBox != null)
+					if (state != null && state.width < 2 && state.height < 2 && state.text != null &&
+						state.text.boundingBox != null)
 					{
 						return mxRectangle.fromRectangle(state.text.boundingBox);
 					}
@@ -8560,7 +8596,26 @@ if (typeof mxVertexHandler != 'undefined')
 			
 			return mxGraphHandlerGetBoundingBox.apply(this, arguments);
 		};
+
+		// Ignores child cells with part style as guides
+		var mxGraphHandlerGetGuideStates = mxGraphHandler.prototype.getGuideStates;
 		
+		mxGraphHandler.prototype.getGuideStates = function()
+		{
+			var states = mxGraphHandlerGetGuideStates.apply(this, arguments);
+			var result = [];
+			
+			for (var i = 0; i < states.length; i++)
+			{
+				if (mxUtils.getValue(states[i].style, 'part', '0') != '1')
+				{
+					result.push(states[i]);
+				}
+			}
+			
+			return result;
+		};
+
 		// Uses text bounding box for edge labels
 		var mxVertexHandlerGetSelectionBounds = mxVertexHandler.prototype.getSelectionBounds;
 		mxVertexHandler.prototype.getSelectionBounds = function(state)
@@ -8665,12 +8720,6 @@ if (typeof mxVertexHandler != 'undefined')
 			
 			var update = mxUtils.bind(this, function()
 			{
-				// Shows rotation handle only if one vertex is selected
-				if (this.rotationShape != null && this.rotationShape.node != null)
-				{
-					this.rotationShape.node.style.display = (this.graph.getSelectionCount() == 1) ? '' : 'none';
-				}
-				
 				if (this.specialHandle != null)
 				{
 					this.specialHandle.node.style.display = (this.graph.isEnabled() && this.graph.getSelectionCount() < this.graph.graphHandler.maxCells) ? '' : 'none';
@@ -8857,6 +8906,13 @@ if (typeof mxVertexHandler != 'undefined')
 		var vertexHandlerRedrawHandles = mxVertexHandler.prototype.redrawHandles;
 		mxVertexHandler.prototype.redrawHandles = function()
 		{
+			// Shows rotation handle only if one vertex is selected
+			if (this.rotationShape != null && this.rotationShape.node != null)
+			{
+				this.rotationShape.node.style.display = (this.graph.getSelectionCount() == 1 &&
+					(this.index == null || this.index == mxEvent.ROTATION_HANDLE)) ? '' : 'none';
+			}
+			
 			vertexHandlerRedrawHandles.apply(this);
 
 			if (this.state != null && this.linkHint != null)
@@ -8885,20 +8941,7 @@ if (typeof mxVertexHandler != 'undefined')
 					this.state.view.graph.tolerance) + 'px';
 			}
 		};
-
 		
-		var vertexHandlerReset = mxVertexHandler.prototype.reset;
-		mxVertexHandler.prototype.reset = function()
-		{
-			vertexHandlerReset.apply(this, arguments);
-			
-			// Shows rotation handle only if one vertex is selected
-			if (this.rotationShape != null && this.rotationShape.node != null)
-			{
-				this.rotationShape.node.style.display = (this.graph.getSelectionCount() == 1) ? '' : 'none';
-			}
-		};
-	
 		var vertexHandlerDestroy = mxVertexHandler.prototype.destroy;
 		mxVertexHandler.prototype.destroy = function()
 		{

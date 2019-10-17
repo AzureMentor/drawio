@@ -1,3 +1,81 @@
+17-OCT-2019: 12.1.3
+
+- Fixes Google Drive auth in Office plugin
+- Uses mxGraph 4.0.5
+
+16-OCT-2019: 12.1.2
+
+- Fixes scrollbars in Confluence Cloud and Jira Cloud
+- Fixes export of uncompressed XML files to PDF
+- Uses mxGraph 4.0.3 beta 7
+
+14-OCT-2019: 12.1.1
+
+- Uses uncompressed XML files in GitLab and GitHub
+- Fixes background color for cropped PDF export
+- Improves logic for hiding cell moving guides
+- Fixes token override in Google Drive viewer
+- Adds roundtrip editing for PlantUML images
+- Uses mxGraph 4.0.3 beta 6
+
+09-OCT-2019: 12.1.0
+
+- Escape no longer starts editing in Safari and IE 11
+- Uses revision IDs for realtime in Google Drive
+- Fixes ignored alignment for autosize cells
+- Switches to manual sync on cache timeout
+- Disables resize live preview for groups
+- Fixes test URL parameter for logging
+- Adds live preview for moving cells
+- Uses mxGraph 4.0.3 beta 5
+- Uses quirks mode in IE 9
+
+08-OCT-2019: 12.0.3
+
+- Fixes vertical label position of Data shape
+- Handles changed etag in Google Drive after save
+- Fixes page reorder for Chrome on Windows 10 in embed mode
+
+02-OCT-2019: 12.0.2
+
+- Updates pako to 1.0.10
+- Fixes VSS naming problem
+- Restores folder support to Confluence Cloud diagram viewer
+
+01-OCT-2019: 12.0.1
+
+- Adds testing for new pako version
+
+27-SEP-2019: 12.0.0
+
+- Fixes Google auth for multiple users
+- Fixes default grid color in dark mode
+
+26-SEP-2019: 11.3.2
+
+- Updates Dell rack server stencils
+- Docker image build process improvements
+
+24-SEP-2019: 11.3.1
+
+- Fixes uncompressed XML in SVG
+- Fixes offset for ruler
+
+20-SEP-2019: 11.3.0
+
+- Updates Google Cloud Platform stencils
+- Gliffy import improvements
+- Uses uncompressed XML to fix search in Confluence Cloud
+- Adds global compressXml switch
+- Fixes print output in dark mode
+
+18-SEP-2019: 11.2.9
+
+- Adds pre and post config JS files
+- Fixes page numbers in PDF export
+- Adds globalVars to configuration
+- Adds DRAWIO_CONFIG variable
+
 08-SEP-2019: 11.2.8
 
 - Fixes bugs in PlantUML for Confluence Cloud

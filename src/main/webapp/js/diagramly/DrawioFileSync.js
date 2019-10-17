@@ -135,6 +135,11 @@ DrawioFileSync = function(file)
 			}
 			catch (e)
 			{
+				this.file.redirectToNewApp(mxUtils.bind(this, function()
+				{
+					// Callback adds cancel option
+				}));
+				
 				if (window.console != null && urlParams['test'] == '1')
 				{
 					console.log(e);
@@ -653,7 +658,7 @@ DrawioFileSync.prototype.reloadDescriptor = function()
 		if (desc != null)
 		{
 			// Forces data to be updated
-			this.file.setDescriptorEtag(desc, this.file.getCurrentEtag());
+			this.file.setDescriptorRevisionId(desc, this.file.getCurrentRevisionId());
 			this.updateDescriptor(desc);
 			this.fileChangedNotify();
 		}
@@ -684,14 +689,15 @@ DrawioFileSync.prototype.updateDescriptor = function(desc)
  */
 DrawioFileSync.prototype.catchup = function(desc, success, error, abort)
 {
-	if (abort == null || !abort())
+	if (desc != null && (abort == null || !abort()))
 	{
-		var secret = this.file.getDescriptorSecret(desc);
-		var etag = this.file.getDescriptorEtag(desc);
-		var current = this.file.getCurrentEtag();
+		var etag = this.file.getDescriptorRevisionId(desc);
+		var current = this.file.getCurrentRevisionId();
 		
 		if (current == etag)
 		{
+			this.file.patchDescriptor(this.file.getDescriptor(), desc);
+			
 			if (success != null)
 			{
 				success();
@@ -706,6 +712,8 @@ DrawioFileSync.prototype.catchup = function(desc, success, error, abort)
 		}
 		else
 		{
+			var secret = this.file.getDescriptorSecret(desc);
+			
 			// Cache entry may not have been uploaded to cache before new
 			// etag is visible to client so retry once after cache miss
 			var cacheReadyRetryCount = 0;
@@ -716,7 +724,7 @@ DrawioFileSync.prototype.catchup = function(desc, success, error, abort)
 				if (abort == null || !abort())
 				{
 					// Ignores patch if shadow has changed
-					if (current != this.file.getCurrentEtag())
+					if (current != this.file.getCurrentRevisionId())
 					{
 						if (success != null)
 						{
@@ -751,7 +759,7 @@ DrawioFileSync.prototype.catchup = function(desc, success, error, abort)
 							if (acceptResponse && (abort == null || !abort()))
 							{
 								// Ignores patch if shadow has changed
-								if (current != this.file.getCurrentEtag())
+								if (current != this.file.getCurrentRevisionId())
 								{
 									if (success != null)
 									{
@@ -897,7 +905,7 @@ DrawioFileSync.prototype.merge = function(patches, checksum, desc, success, erro
 			this.ui.diffPages(this.file.shadowPages,
 			this.ui.pages) : null;
 		var ignored = this.file.ignorePatches(patches);
-		var etag = this.file.getDescriptorEtag(desc);
+		var etag = this.file.getDescriptorRevisionId(desc);
 
 		if (!ignored)
 		{
@@ -912,7 +920,8 @@ DrawioFileSync.prototype.merge = function(patches, checksum, desc, success, erro
 			if (urlParams['test'] == '1')
 			{
 				EditorUi.debug('Sync.merge', [this],
-					'from', this.file.getCurrentEtag(), 'to', etag,
+					'from', this.file.getCurrentRevisionId(), 'to', etag,
+					'etag', this.file.getDescriptorEtag(desc),
 					'backup', this.file.backupPatch,
 					'attempt', this.catchupRetryCount,
 					'patches', patches,
@@ -922,7 +931,7 @@ DrawioFileSync.prototype.merge = function(patches, checksum, desc, success, erro
 			// Compares the checksum
 			if (checksum != null && checksum != current)
 			{
-				var from = this.ui.hashValue(this.file.getCurrentEtag());
+				var from = this.ui.hashValue(this.file.getCurrentRevisionId());
 				var to = this.ui.hashValue(etag);
 				
 				this.file.checksumError(error, patches, 'From: ' + from + '\nTo: ' + to +
@@ -986,7 +995,7 @@ DrawioFileSync.prototype.merge = function(patches, checksum, desc, success, erro
 		{
 			if (this.file.errorReportsEnabled)
 			{
-				var from = this.ui.hashValue(this.file.getCurrentEtag());
+				var from = this.ui.hashValue(this.file.getCurrentRevisionId());
 				var to = this.ui.hashValue(etag);
 				
 				this.file.sendErrorReport('Error in merge',
@@ -1024,7 +1033,7 @@ DrawioFileSync.prototype.descriptorChanged = function(etag)
 	{
 		var msg = this.objectToString(this.createMessage({a: 'desc',
 			m: this.lastModified.getTime()}));
-		var current = this.file.getCurrentEtag();
+		var current = this.file.getCurrentRevisionId();
 		var data = this.objectToString({});
 
 		mxUtils.post(EditorUi.cacheUrl, this.getIdParameters() +
@@ -1091,8 +1100,8 @@ DrawioFileSync.prototype.fileSaved = function(pages, lastDesc, success, error)
 			var diff = this.ui.diffPages(shadow, pages);
 			
 			// Data is stored in cache and message is sent to all listeners
-			var etag = this.file.getDescriptorEtag(lastDesc);
-			var current = this.file.getCurrentEtag();
+			var etag = this.file.getDescriptorRevisionId(lastDesc);
+			var current = this.file.getCurrentRevisionId();
 			
 			var data = this.objectToString(this.createMessage({patch: diff, checksum: checksum}));
 			var msg = this.objectToString(this.createMessage({m: this.lastModified.getTime()}));
@@ -1113,8 +1122,8 @@ DrawioFileSync.prototype.fileSaved = function(pages, lastDesc, success, error)
 			if (urlParams['test'] == '1')
 			{
 				EditorUi.debug('Sync.fileSaved', [this],
-					'from', etag, 'to', current, data.length,
-					'bytes', 'diff', diff, 'checksum', checksum);
+					'from', etag, 'to', current, 'etag', this.file.getCurrentEtag(),
+					data.length, 'bytes', 'diff', diff, 'checksum', checksum);
 			}
 			
 			// Logs successull diff

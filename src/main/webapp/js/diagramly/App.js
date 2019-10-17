@@ -240,7 +240,7 @@ App.DROPBOX_APPKEY = 'libwls2fa9szdji';
 App.DROPBOX_URL = 'js/dropbox/Dropbox-sdk.min.js';
 
 /**
- * Sets the delay for autosave in milliseconds. Default is 2000.
+ * Sets URL to load the Dropbox dropins JS from.
  */
 App.DROPINS_URL = 'https://www.dropbox.com/static/api/2/dropins.js';
 
@@ -261,11 +261,6 @@ App.TRELLO_URL = 'https://api.trello.com/1/client.js';
 App.TRELLO_JQUERY_URL = 'https://code.jquery.com/jquery-1.7.1.min.js';
 
 /**
- * Trello JQuery dependency
- */
-App.FOOTER_PLUGIN_URL = 'https://www.jgraph.com/drawio-footer.js';
-
-/**
  * Specifies the key for the pusher project.
  */
 App.PUSHER_KEY = '1e756b07a690c5bdb054';
@@ -284,12 +279,7 @@ App.PUSHER_URL = 'https://js.pusher.com/4.3/pusher.min.js';
  * Google APIs to load. The realtime API is needed to notify collaborators of conversion
  * of the realtime files, but after Dec 11 it's read-only and hence no longer needed.
  */
-App.GOOGLE_APIS = 'client,drive-share'; 
-
-/**
- * Google Realtime API export endpoint end of life on 09/27/2019.
- */
-App.GOOGLE_REALTIME_EOL = 1569535200000;
+App.GOOGLE_APIS = 'drive-share'; 
 
 /**
  * Function: authorize
@@ -555,7 +545,8 @@ App.main = function(callback, createUi)
 		}
 		
 		// Loads Pusher API
-		if (!mxClient.IS_CHROMEAPP && !EditorUi.isElectronApp && DrawioFile.SYNC == 'auto' &&
+		if (('ArrayBuffer' in window) && !mxClient.IS_CHROMEAPP && !EditorUi.isElectronApp &&
+			DrawioFile.SYNC == 'auto' && urlParams['embed'] != '1' && urlParams['local'] != '1' &&
 			urlParams['stealth'] != '1' && urlParams['offline'] != '1')
 		{
 			// TODO: Check if async loading is fast enough
@@ -853,6 +844,21 @@ App.main = function(callback, createUi)
 		}
 	}
 	
+	if (window.DRAWIO_CONFIG != null)
+	{
+		try
+		{
+			Editor.configure(window.DRAWIO_CONFIG, true);
+		}
+		catch (e)
+		{
+			if (window.console != null)
+			{
+				console.log('Error in global configuration: ' + e, window.DRAWIO_CONFIG);
+			}
+		}
+	}
+	
 	// Sends load event if configuration is requested and waits for configure action
 	if (urlParams['configure'] == '1')
 	{
@@ -900,7 +906,7 @@ mxUtils.extend(App, EditorUi);
 /**
  * Executes the first step for connecting to Google Drive.
  */
-App.prototype.defaultUserPicture = 'https://lh3.googleusercontent.com/-HIzvXUy6QUY/AAAAAAAAAAI/AAAAAAAAAAA/giuR7PQyjEk/photo.jpg?sz=30';
+App.prototype.defaultUserPicture = 'https://lh3.googleusercontent.com/-HIzvXUy6QUY/AAAAAAAAAAI/AAAAAAAAAAA/giuR7PQyjEk/photo.jpg?sz=64';
 
 /**
  * 
@@ -1126,7 +1132,7 @@ App.prototype.init = function()
 		}));
 	}
 	
-	var createFooter = mxUtils.bind(this, function(label, link, className, closeHandler, helpLink)
+	var createFooter = mxUtils.bind(this, function(label, link, className, closeHandler, helpLink, clickHandler)
 	{
 		var footer = document.createElement('div');
 		footer.style.cssText = 'position:absolute;bottom:0px;max-width:90%;padding:10px;padding-right:26px;' +
@@ -1134,12 +1140,12 @@ App.prototype.init = function()
 		footer.className = className;
 
 		var icn = ((className == 'geStatusAlert') ? '<img src="' + mxClient.imageBasePath + '/warning.gif" border="0" ' +
-				'style="margin-top:-4px;margin-right:8px;margin-left:8px;" valign="middle"/>' : '');
+			'style="margin-top:-4px;margin-right:8px;margin-left:8px;" valign="middle"/>' : '');
 		
 		mxUtils.setPrefixedStyle(footer.style, 'transform', 'translate(-50%,110%)');
 		mxUtils.setPrefixedStyle(footer.style, 'transition', 'all 1s ease');
 		footer.style.whiteSpace = 'nowrap';
-		footer.innerHTML = '<a href="' + link +
+		footer.innerHTML = '<a href="' + ((link != null) ? link : 'javascript:void(0)') +
 			'" target="_blank" style="display:inline;text-decoration:none;font-weight:700;font-size:13px;opacity:1;">' +
 			icn + label + icn + '</a>' + ((helpLink != null) ? '<a href="' + helpLink +
 			'" target="_blank" style="display:inline;text-decoration:none;font-weight:700;font-size:13px;opacity:1;margin-right:8px;">Help</a>' : '');
@@ -1158,6 +1164,12 @@ App.prototype.init = function()
 		if (closeHandler)
 		{
 			mxEvent.addListener(img, 'click', closeHandler);
+		}
+		
+		if (clickHandler != null)
+		{
+			footer.style.paddingRight = '40px';
+			mxEvent.addListener(footer, 'click', clickHandler);
 		}
 		
 		return footer;
@@ -1252,41 +1264,6 @@ App.prototype.init = function()
 						this.updateUserElement();
 						this.restoreLibraries();
 						this.checkLicense();
-						
-						if (App.GOOGLE_REALTIME_EOL - Date.now() >= 0)
-						{
-							if (this.drive.user != null && (!isLocalStorage || mxSettings.settings == null ||
-								mxSettings.settings.closeRealtimeWarning == null || mxSettings.settings.closeRealtimeWarning <
-								new Date().getTime() - (2 * 24 * 60 * 60 * 1000)) &&
-								(!this.editor.chromeless || this.editor.editable))
-							{
-								this.drive.checkRealtimeFiles(mxUtils.bind(this, function()
-								{
-									var footer = createFooter('You need to take action to convert legacy files. Click here.',
-										'https://desk.draw.io/support/solutions/articles/16000092210',
-										'geStatusAlert',
-										mxUtils.bind(this, function()
-										{
-											footer.parentNode.removeChild(footer);
-											this.hideFooter();
-					
-											// Close permanently
-											if (isLocalStorage && mxSettings.settings != null)
-											{
-												mxSettings.settings.closeRealtimeWarning = Date.now();
-												mxSettings.save();
-											}
-										}));
-	
-									document.body.appendChild(footer);
-									
-									window.setTimeout(mxUtils.bind(this, function()
-									{
-										mxUtils.setPrefixedStyle(footer.style, 'transform', 'translate(-50%,0%)');
-									}), 1500);
-								}));
-							}
-						}
 					}))
 					
 					// Notifies listeners of new client
@@ -1295,24 +1272,7 @@ App.prototype.init = function()
 				
 				if (window.DrawGapiClientCallback != null)
 				{
-					gapi.load(((urlParams['picker'] != '0') ? 'picker,': '') + 'auth:' + App.GOOGLE_APIS, mxUtils.bind(this, function(resp)
-					{
-						// Starts the app without the Google Option if the API fails to load
-						if (gapi.client != null)
-						{
-							gapi.client.load('drive', 'v2', mxUtils.bind(this, function()
-							{
-								// Needed to avoid popup blocking for non-immediate authentication
-								gapi.auth.init(mxUtils.bind(this, function()
-								{
-									if (gapi.client.drive != null)
-									{
-										doInit();
-									}
-								}));
-							}));
-						}
-					}));
+					gapi.load(((urlParams['picker'] != '0') ? 'picker,': '') + App.GOOGLE_APIS, doInit);
 					
 					/**
 					 * Clears any callbacks.
@@ -1393,8 +1353,8 @@ App.prototype.init = function()
 			this.mode = App.mode;
 		}
 		
-		if (!mxClient.IS_CHROMEAPP && !EditorUi.isElectronApp && urlParams['embed'] != '1' &&
-			urlParams['stealth'] != '1' && urlParams['offline'] != '1' &&
+		if (!mxClient.IS_CHROMEAPP && !EditorUi.isElectronApp && urlParams['embed'] != '1' && DrawioFile.SYNC == 'auto' &&
+			urlParams['local'] != '1' && urlParams['stealth'] != '1' && urlParams['offline'] != '1' &&
 			(!this.editor.chromeless || this.editor.editable))
 		{
 			// Checks if the cache is alive
@@ -1403,20 +1363,31 @@ App.prototype.init = function()
 			var timeoutThread = window.setTimeout(mxUtils.bind(this, function()
 			{
 				acceptResponse = false;
+				
+				// Switches to manual sync if cache cannot be reached
+				DrawioFile.SYNC = 'manual';
+				
+				var file = this.getCurrentFile();
+				
+				if (file != null && file.sync != null)
+				{
+					file.sync.destroy();
+					file.sync = null;
+					
+					var status = mxUtils.htmlEntities(mxResources.get('timeout'));
+					this.editor.setStatus('<div title="'+ status +
+						'" class="geStatusAlert" style="overflow:hidden;">' + status +
+						'</div>');
+				}
+				
 				EditorUi.logEvent({category: 'TIMEOUT-CACHE-CHECK', action: 'timeout', label: 408});
-			}), this.timeout);
+			}), Editor.cacheTimeout);
 			
 			var t0 = new Date().getTime();
 			
 			mxUtils.get(EditorUi.cacheUrl + '?alive', mxUtils.bind(this, function(req)
 			{
 				window.clearTimeout(timeoutThread);
-				
-//				if (acceptResponse)
-//				{
-//					EditorUi.logEvent({category: 'ALIVE-CACHE-CHECK', action: 'alive', label:
-//						req.getStatus() + '.' + (new Date().getTime() - t0)});
-//				}
 			}));
 
 			this.editor.addListener('fileLoaded', mxUtils.bind(this, function()
@@ -1457,6 +1428,54 @@ App.prototype.init = function()
 						mxUtils.setPrefixedStyle(footer.style, 'transform', 'translate(-50%,110%)');
 						this.footerShowing = false;
 					}), 15000);
+				}
+				else if ((!isLocalStorage || mxSettings.settings == null ||
+					mxSettings.settings.closeRateFooter == null) &&
+					(!this.editor.chromeless || this.editor.editable) &&
+					!this.footerShowing && urlParams['open'] == null)
+				{
+					var star = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEgAACxIB0t1+/AAAABx0RVh0U29mdHdhcmUAQWRvYmUgRmlyZ' +
+						'XdvcmtzIENTM5jWRgMAAAQRdEVYdFhNTDpjb20uYWRvYmUueG1wADw/eHBhY2tldCBiZWdpbj0iICAgIiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+Cjx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8i' +
+						'IHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDQuMS1jMDM0IDQ2LjI3Mjk3NiwgU2F0IEphbiAyNyAyMDA3IDIyOjExOjQxICAgICAgICAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDI' +
+						'vMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp4YXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iPgogICAgICAgICA8eGFwOkNyZW' +
+						'F0b3JUb29sPkFkb2JlIEZpcmV3b3JrcyBDUzM8L3hhcDpDcmVhdG9yVG9vbD4KICAgICAgICAgPHhhcDpDcmVhdGVEYXRlPjIwMDgtMDItMTdUMDI6MzY6NDVaPC94YXA6Q3JlYXRlRGF0ZT4KICAgICAgICAgPHhhcDpNb2RpZ' +
+						'nlEYXRlPjIwMDktMDMtMTdUMTQ6MTI6MDJaPC94YXA6TW9kaWZ5RGF0ZT4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmRjPSJo' +
+						'dHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+CiAgICAgICAgIDxkYzpmb3JtYXQ+aW1hZ2UvcG5nPC9kYzpmb3JtYXQ+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgo' +
+						'gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgIC' +
+						'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI' +
+						'CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIIImu8AAAAAVdEVYdENyZWF0aW9uIFRpbWUAMi8xNy8wOCCcqlgAAAHuSURBVDiNlZJBi1JRGIbfk+fc0ZuMXorJe4XujWoMdREaA23HICj6AQeLINr0C4I27ab2' +
+						'7VqOI9+q/sH8gMDceG1RkIwgClEXFMbRc5zTZgZURmG+5fu9PN/7Hg6wZohoh4h21nn4uqXW+q0xZgzg+SrPlTXX73uet+26bp6ICpcGaK1fua57M5vN3tZav7gUgIiSqVTqcRAEm0EQbCaTyQoRXb3Iy4hoG8CT6XSaY4xtMMa' +
+						'SQohMPp8v+r7vAEC3243CMGwqpfoApsaYE8uyfgM45ABOjDEvXdfNlMvlzFINAIDneY7neZVzvdlsDgaDQYtzfsjOIjtKqU+e5+0Wi0V3VV8ACMOw3+/3v3HOX0sp/7K53te11h/S6fRuoVAIhBAL76OUOm2320dRFH0VQuxJKf' +
+						'8BAFu+UKvVvpRKpWe2bYt5fTweq0ajQUKIN1LK43N94SMR0Y1YLLYlhBBKqQUw51wkEol7WmuzoC8FuJtIJLaUUoii6Ljb7f4yxpz6vp9zHMe2bfvacDi8BeDHKkBuNps5rVbr52QyaVuW9ZExttHpdN73ej0/Ho+nADxYCdBaV' +
+						'0aj0RGAz5ZlHUgpx2erR/V6/d1wOHwK4CGA/QsBnPN9AN+llH+WkqFare4R0QGAO/M6M8Ysey81/wGqa8MlVvHPNAAAAABJRU5ErkJggg==';
+					var rate = '<a style="cursor:default;" title="Please Rate Us"><b>Please Rate Us:</b></a>' +
+						'<img border="0" align="absmiddle" title="1 star" style="margin-top:-6px;cursor:pointer;margin-left:8px;" src="' + star + '">' +
+						'<img border="0" align="absmiddle" title="2 stars" style="margin-top:-6px;margin-left:3px;cursor:pointer;" src="' + star + '">' +
+						'<img border="0" align="absmiddle" title="3 stars" style="margin-top:-6px;margin-left:3px;cursor:pointer;" src="' + star + '">' +
+						'<img border="0" align="absmiddle" title="4 stars" style="margin-top:-6px;margin-left:3px;cursor:pointer;" src="' + star + '" ' +
+						'onclick="javascript:window.open(\'https://marketplace.atlassian.com/apps/1210933/draw-io-diagrams-for-confluence?hosting=cloud&tab=reviews\');">';
+					
+					var footer = createFooter(rate, null, 'geStatusMessage', null, null,
+						mxUtils.bind(this, function()
+						{
+							footer.parentNode.removeChild(footer);
+							this.hideFooter();
+
+							// Close permanently
+							if (isLocalStorage && mxSettings.settings != null)
+							{
+								mxSettings.settings.closeRateFooter = Date.now();
+								mxSettings.save();
+							}
+						}));
+					
+					document.body.appendChild(footer);
+					this.footerShowing = true;
+					
+					window.setTimeout(mxUtils.bind(this, function()
+					{
+						mxUtils.setPrefixedStyle(footer.style, 'transform', 'translate(-50%,0%)');
+					}), 1500);
 				}
 			}));
 		}
@@ -1599,18 +1618,9 @@ App.prototype.isDriveDomain = function()
 {
 	return urlParams['drive'] != '0' &&
 		(window.location.hostname == 'test.draw.io' ||
-		window.location.hostname == 'cdn.draw.io' ||
 		window.location.hostname == 'www.draw.io' ||
 		window.location.hostname == 'drive.draw.io' ||
 		window.location.hostname == 'jgraph.github.io');
-};
-
-/**
- * Returns true if the current domain is for the old drive app.
- */
-App.prototype.isLegacyDriveDomain = function()
-{
-	return urlParams['drive'] == 0 || window.location.hostname == 'legacy.draw.io';
 };
 
 /**
@@ -2434,33 +2444,7 @@ App.prototype.loadGapi = function(then)
 {
 	if (typeof gapi !== 'undefined')
 	{
-		gapi.load(((urlParams['picker'] != '0') ? 'picker,': '') + 'auth:' + App.GOOGLE_APIS, mxUtils.bind(this, function(resp)
-		{
-			// Starts the app without the Google Option if the API fails to load
-			if (gapi.client == null)
-			{
-				this.drive = null;
-				this.mode = null;
-				then();
-			}
-			else
-			{
-				gapi.client.load('drive', 'v2', mxUtils.bind(this, function()
-				{
-					// Needed to avoid popup blocking for non-immediate authentication
-					gapi.auth.init(mxUtils.bind(this, function()
-					{
-						if (gapi.client.drive == null)
-						{
-							this.drive = null;
-							this.mode = null;
-						}
-						
-						then();
-					}));
-				}));
-			}
-		}));
+		gapi.load(((urlParams['picker'] != '0') ? 'picker,': '') + App.GOOGLE_APIS, then);
 	}
 };
 
@@ -2517,15 +2501,7 @@ App.prototype.load = function()
 				{
 					this.loadGapi(mxUtils.bind(this, function()
 					{
-						if (urlParams['convert-realtime'] == '1')
-						{
-							this.spinner.stop();
-							this.drive.convertRealtimeFiles();
-						}
-						else
-						{
-							this.start();
-						}
+						this.start();
 					}));
 				}
 			}
@@ -5821,75 +5797,140 @@ App.prototype.updateUserElement = function()
 										
 					if (this.drive != null)
 					{
-						var driveUser = this.drive.getUser();
+						var driveUsers = this.drive.getUsersList();
 						
-						if (driveUser != null)
+						if (driveUsers.length > 0)
 						{
-							connected = true;
-							this.userPanel.innerHTML += '<table title="User ID: ' + driveUser.id +
-								'" style="font-size:10pt;padding:20px 20px 10px 10px;">' +
-								'<tr><td valign="middle">' +
-								((driveUser.pictureUrl != null) ?
-									'<img width="50" height="50" style="margin-right:8px;border-radius:50%;" src="' + driveUser.pictureUrl + '"/>' :
-									'<img width="46" height="46" style="margin-right:4px;margin-top:0px;" src="' + this.defaultUserPicture + '"/>') +
-								'</td><td valign="top" style="white-space:nowrap;' +
-								((driveUser.pictureUrl != null) ? 'padding-top:4px;' : '') +
-								'">' + mxUtils.htmlEntities(driveUser.displayName) + '<br>' +
-								'<small style="color:gray;">' + mxUtils.htmlEntities(driveUser.email) +
-								'</small><div style="margin-top:4px;"><i>' +
-								mxResources.get('googleDrive') + '</i></div></tr></table>';
-							var div = document.createElement('div');
-							div.style.textAlign = 'center';
-							div.style.paddingBottom = '12px';
-							div.style.whiteSpace = 'nowrap';
-
 							// LATER: Cannot change user while file is open since close will not work with new
 							// credentials and closing the file using fileLoaded(null) will show splash dialog.
-							var btn = mxUtils.button(mxResources.get('signOut'), mxUtils.bind(this, function()
+							var closeFile = mxUtils.bind(this, function(callback, spinnerMsg)
 							{
 								var file = this.getCurrentFile();
 
 								if (file != null && file.constructor == DriveFile)
 								{
-									this.confirm(mxResources.get('areYouSure'), mxUtils.bind(this, function()
+									this.spinner.spin(document.body, spinnerMsg);
+										
+//									file.close();
+									this.fileLoaded(null);
+
+									// LATER: Use callback to wait for thumbnail update
+									window.setTimeout(mxUtils.bind(this, function()
 									{
-										this.spinner.spin(document.body, mxResources.get('signOut'));
-										
-										this.diagramContainer.style.display = 'none';
-										this.formatContainer.style.display = 'none';
-										this.hsplit.style.display = 'none';
-										this.sidebarContainer.style.display = 'none';
-										this.sidebarFooterContainer.style.display = 'none';
-										
-										if (this.tabContainer != null)
-										{
-											this.tabContainer.style.display = 'none';
-										}
-											
-										file.close();
-	
-										// LATER: Use callback to wait for thumbnail update
-										window.setTimeout(mxUtils.bind(this, function()
-										{
-											// Workaround to disable the splash screen before reload
-											this.showDialog = function() {};
-											window.location.hash = '';
-											this.drive.clearUserId();
-											gapi.auth.signOut();
-											
-											// Reload page to reset client auth
-											window.location.reload();
-										}), (file != null && file.constructor == DriveFile) ? 2000 : 0);
-									}));
+										this.spinner.stop();
+										callback();
+									}), 2000);
 								}
 								else
 								{
-									this.drive.clearUserId();
-									this.drive.setUser(null);
-									gapi.auth.signOut();
+									callback();
 								}
+							});
+							
+							var createUserRow = mxUtils.bind(this, function (user)
+							{
+								var tr = document.createElement('tr');
+								tr.style.cssText = user.isCurrent? '' : 'background-color: whitesmoke; cursor: pointer';
+								tr.setAttribute('title', 'User ID: ' + user.id);
+								tr.innerHTML = '<td valign="middle" style="height: 59px;width: 66px;' + 
+									(user.isCurrent? '' : 'border-top: 1px solid rgb(224, 224, 224);') + '">' +
+									'<img width="50" height="50" style="margin: 4px 8px 0 8px;border-radius:50%;" src="' + 
+									((user.pictureUrl != null) ? user.pictureUrl : this.defaultUserPicture) + '"/>' +
+									'</td><td valign="middle" style="white-space:nowrap;' +
+									((user.pictureUrl != null) ? 'padding-top:4px;' : '') +
+									(user.isCurrent? '' : 'border-top: 1px solid rgb(224, 224, 224);') +
+									'">' + mxUtils.htmlEntities(user.displayName) + '<br>' +
+									'<small style="color:gray;">' + mxUtils.htmlEntities(user.email) +
+									'</small><div style="margin-top:4px;"><i>' +
+									mxResources.get('googleDrive') + '</i></div>';
+								
+								if (!user.isCurrent)
+								{
+									mxEvent.addListener(tr, 'click', mxUtils.bind(this, function(evt)
+									{
+										closeFile(mxUtils.bind(this, function()
+										{
+											this.stateArg = null;
+											this.drive.setUser(user);
+											
+											this.drive.authorize(true, mxUtils.bind(this, function()
+											{
+												this.setMode(App.MODE_GOOGLE);
+												this.hideDialog();
+												this.showSplash();
+											}), mxUtils.bind(this, function(resp)
+											{
+												this.handleError(resp);
+											}), true); //Remember is true since add account imply keeping that account
+										}), mxResources.get('closingFile') + '...');
+										
+										mxEvent.consume(evt);
+									}));
+								}
+							
+								return tr;
+							});
+							
+							connected = true;
+							
+							var driveUserTable = document.createElement('table');
+							driveUserTable.style.cssText ='font-size:10pt;padding: 20px 0 0 0;min-width: 300px;border-spacing: 0;';
+
+							for (var i = 0; i < driveUsers.length; i++)
+							{
+								driveUserTable.appendChild(createUserRow(driveUsers[i]));
+							}
+							
+							this.userPanel.appendChild(driveUserTable);
+							
+							var div = document.createElement('div');
+							div.style.textAlign = 'left';
+							div.style.padding = '8px';
+							div.style.whiteSpace = 'nowrap';
+							div.style.borderTop = '1px solid rgb(224, 224, 224)';
+
+							var btn = mxUtils.button(mxResources.get('signOut'), mxUtils.bind(this, function()
+							{
+								this.confirm(mxResources.get('areYouSure'), mxUtils.bind(this, function()
+								{
+									closeFile(mxUtils.bind(this, function()
+									{
+										this.stateArg = null;
+										this.drive.logout();
+										this.setMode(App.MODE_GOOGLE);
+										this.hideDialog();
+										this.showSplash();
+									}), mxResources.get('signOut'));
+								}));
 							}));
 							btn.className = 'geBtn';
+							btn.style.float = 'right';
+							div.appendChild(btn);
+							
+							var btn = mxUtils.button(mxResources.get('addAccount'), mxUtils.bind(this, function()
+							{
+								var authWin = this.drive.createAuthWin();
+								//FIXME This doean't work to set focus back to main window until closing the file is done
+								authWin.blur();
+								window.focus();
+								
+								closeFile(mxUtils.bind(this, function()
+								{
+									this.stateArg = null;
+									
+									this.drive.authorize(false, mxUtils.bind(this, function()
+									{
+										this.setMode(App.MODE_GOOGLE);
+										this.hideDialog();
+										this.showSplash();
+									}), mxUtils.bind(this, function(resp)
+									{
+										this.handleError(resp);
+									}), true, authWin); //Remember is true since add account imply keeping that account
+								}), mxResources.get('closingFile') + '...');
+							}));
+							btn.className = 'geBtn';
+							btn.style.margin = '0px';
 							div.appendChild(btn);
 							this.userPanel.appendChild(div);
 						}
@@ -5905,12 +5946,17 @@ App.prototype.updateUserElement = function()
 							}
 							
 							connected = true;
-							this.userPanel.innerHTML += '<table style="font-size:10pt;padding:20px 20px 10px 10px;"><tr><td valign="top">' +
+							var userTable = document.createElement('table');
+							userTable.style.cssText = 'font-size:10pt;padding:' + (connected? '10' : '20') + 'px 20px 10px 10px;';
+							
+							userTable.innerHTML += '<tr><td valign="top">' +
 								((logo != null) ? '<img style="margin-right:6px;" src="' + logo + '" width="40" height="40"/></td>' : '') +
 								'<td valign="middle" style="white-space:nowrap;">' + mxUtils.htmlEntities(user.displayName) +
 								((user.email != null) ? '<br><small style="color:gray;">' + mxUtils.htmlEntities(user.email) + '</small>' : '') +
 								((label != null) ? '<div style="margin-top:4px;"><i>' + mxUtils.htmlEntities(label) + '</i></div>' : '') +
-								'</td></tr></table>';
+								'</td></tr>';
+							
+							this.userPanel.appendChild(userTable);
 							var div = document.createElement('div');
 							div.style.textAlign = 'center';
 							div.style.paddingBottom = '12px';

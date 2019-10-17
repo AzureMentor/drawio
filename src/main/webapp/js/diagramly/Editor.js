@@ -118,6 +118,33 @@
 	Editor.enableCustomProperties = true;
 
 	/**
+	 * Specifies if XML files should be compressed. Default is true.
+	 */
+	Editor.compressXml = true;
+
+	/**
+	 * Specifies global variables.
+	 */
+	Editor.globalVars = null;
+
+	/**
+	 * Disables the shadow option in the format panel.
+	 */
+	Editor.shadowOptionEnabled = true;
+
+	/**
+	 * Reference to the config object passed to <configure>.
+	 */
+	Editor.config = null;
+
+	/**
+	 * Reference to the version of the last config object in
+	 * <configure>. If this is different to the last version in
+	 * mxSettings.parse, then the settings are reset.
+	 */
+	Editor.configVersion = null;
+	
+	/**
 	 * Common properties for all edges.
 	 */
 	Editor.commonEdgeProperties = [
@@ -336,7 +363,37 @@
 		'Edward Morrison,Brand Manager,emo,Office 2,Evan Miller,me@example.com,#d5e8d4,#82b366,,https://www.draw.io,https://cdn3.iconfinder.com/data/icons/user-avatars-1/512/users-10-3-128.png\n' +
 		'Ron Donovan,System Admin,rdo,Office 3,Evan Miller,me@example.com,#d5e8d4,#82b366,"emo,tva",https://www.draw.io,https://cdn3.iconfinder.com/data/icons/user-avatars-1/512/users-2-128.png\n' +
 		'Tessa Valet,HR Director,tva,Office 4,Evan Miller,me@example.com,#d5e8d4,#82b366,,https://www.draw.io,https://cdn3.iconfinder.com/data/icons/user-avatars-1/512/users-3-128.png\n';
-	
+
+	/**
+	 * Compresses the given string.
+	 */
+	Editor.fastCompress = function(data)
+	{
+		if (data == null || data.length == 0 || typeof(pako) === 'undefined')
+		{
+			return data;
+		}
+		else
+		{
+			return pako.deflateRaw(data, {to: 'string'});
+		}
+	};
+
+	/**
+	 * Decompresses the given string.
+	 */
+	Editor.fastDecompress = function(data)
+	{
+	   	if (data == null || data.length == 0 || typeof(pako) === 'undefined')
+		{
+			return data;
+		}
+		else
+		{
+			return pako.inflateRaw(data, {to: 'string'});
+		}
+	};
+
 	/**
 	 * Helper function to extract the graph model XML node.
 	 */
@@ -526,8 +583,8 @@
 					if (value.substring(0, idx) == 'mxGraphModel')
 					{
 						// Workaround for Java URL Encoder using + for spaces, which isn't compatible with JS
-						var xmlData = Graph.bytesToString(pako.inflateRaw(
-							value.substring(idx + 2))).replace(/\+/g,' ');
+						var xmlData = pako.inflateRaw(value.substring(idx + 2),
+							{to: 'string'}).replace(/\+/g,' ');
 						
 						if (xmlData != null && xmlData.length > 0)
 						{
@@ -575,22 +632,27 @@
 	};
 
 	/**
-	 * Disables the shadow option in the format panel.
+	 * Extracts any parsers errors in the given XML.
 	 */
-	Editor.shadowOptionEnabled = true;
+	Editor.extractParserError = function(node, defaultCause)
+	{
+		var cause = null;
+		var errors = (node != null) ? node.getElementsByTagName('parsererror') : null;
+		
+		if (errors != null && errors.length > 0)
+		{
+			cause = defaultCause || mxResources.get('invalidChars');
+			var divs = errors[0].getElementsByTagName('div');
+			
+			if (divs.length > 0)
+			{
+				cause = mxUtils.getTextContent(divs[0]);
+			}
+		}
+		
+		return cause;
+	};
 
-	/**
-	 * Reference to the config object passed to <configure>.
-	 */
-	Editor.config = null;
-
-	/**
-	 * Reference to the version of the last config object in
-	 * <configure>. If this is different to the last version in
-	 * mxSettings.parse, then the settings are reset.
-	 */
-	Editor.configVersion = null;
-	
 	/**
 	 * Global configuration of the Editor
 	 * see https://desk.draw.io/solution/articles/16000058316
@@ -614,6 +676,16 @@
 			if (config.templateFile != null)
 			{
 				EditorUi.templateFile = config.templateFile;
+			}
+			
+			if (config.globalVars != null)
+			{
+				Editor.globalVars = config.globalVars;
+			}
+
+			if (config.compressXml != null)
+			{
+				Editor.compressXml = config.compressXml;
 			}
 			
 			if (config.customFonts)
@@ -3727,11 +3799,22 @@
 	 */
 	Graph.prototype.updateGlobalUrlVariables = function()
 	{
+		this.globalVars = Editor.globalVars;
+		
 		if (urlParams['vars'] != null)
 		{
 			try
 			{
-				this.globalUrlVars = JSON.parse(decodeURIComponent(urlParams['vars']));
+				this.globalVars = (this.globalVars != null) ? mxUtils.clone(this.globalVars) : {};
+				var vars = JSON.parse(decodeURIComponent(urlParams['vars']));
+				
+				if (vars != null)
+				{
+					for (var key in vars)
+					{
+						this.globalVars[key] = vars[key];
+					}
+				}
 			}
 			catch (e)
 			{
@@ -3749,7 +3832,7 @@
 	 */
 	Graph.prototype.getExportVariables = function()
 	{
-		return (this.globalUrlVars != null) ? this.globalUrlVars : {};
+		return (this.globalVars != null) ? mxUtils.clone(this.globalVars) : {};
 	};
 	
 	/**
@@ -3761,9 +3844,9 @@
 	{
 		var val = graphGetGlobalVariable.apply(this, arguments);
 		
-		if (val == null && this.globalUrlVars != null)
+		if (val == null && this.globalVars != null)
 		{
-			val = this.globalUrlVars[name];
+			val = this.globalVars[name];
 		}
 		
 		return val;
@@ -4943,7 +5026,25 @@
 						};
 					}
 					
+					// Switches stylesheet for print output in dark mode
+					var temp = null;
+					
+					if (graph.themes != null && graph.defaultThemeName == 'darkTheme')
+					{
+						temp = graph.stylesheet;
+						graph.stylesheet = graph.getDefaultStylesheet()
+						graph.refresh();
+					}
+					
+					// Generates the print output
 					pv.open(null, null, forcePageBreaks, true);
+					
+					// Restores the stylesheet
+					if (temp != null)
+					{
+						graph.stylesheet = temp;
+						graph.refresh();
+					}
 				}
 				else
 				{				

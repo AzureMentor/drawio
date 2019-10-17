@@ -1,6 +1,6 @@
 /**
- * Copyright (c) 2006-2017, JGraph Ltd
- * Copyright (c) 2006-2017, Gaudenz Alder
+ * Copyright (c) 2006-2019, JGraph Ltd
+ * Copyright (c) 2006-2019, draw.io AG
  */
 (function()
 {
@@ -66,7 +66,7 @@
 		var dropboxEnabled = ((urlParams['embed'] != '1' && urlParams['db'] != '0') || (urlParams['embed'] == '1' && urlParams['db'] == '1')) &&
 			mxClient.IS_SVG && (document.documentMode == null || document.documentMode > 9);
 		var oneDriveEnabled = (window.location.hostname == 'www.draw.io' || window.location.hostname == 'test.draw.io' ||
-				window.location.hostname == 'drive.draw.io' || window.location.hostname == 'legacy.draw.io') &&
+				window.location.hostname == 'drive.draw.io') &&
 				(((urlParams['embed'] != '1' && urlParams['od'] != '0') || (urlParams['embed'] == '1' &&
 				urlParams['od'] == '1')) && !navigator.userAgent.match(/(iPad|iPhone|iPod)/g) &&
 				(navigator.userAgent.indexOf('MSIE') < 0 || document.documentMode >= 10));
@@ -170,12 +170,15 @@
 			{
 				editorUi.ruler.destroy();
 				editorUi.ruler = null;
+				editorUi.refresh();
 			}
 			else
 			{
 				editorUi.ruler = new mxDualRuler(editorUi, editorUi.editor.graph.view.unit);
+				editorUi.refresh();
 			}
 		});
+		rulerAction.setEnabled(editorUi.canvasSupported && document.documentMode != 9);
 		rulerAction.setToggleAction(true);
 		rulerAction.setSelectedCallback(function() { return editorUi.ruler != null; });
 
@@ -201,7 +204,10 @@
 					
 					this.freehandWindow.window.setVisible(graph.freehand.isDrawing());
 				}
-			})).isEnabled = isGraphEnabled;
+			})).isEnabled = function()
+			{
+				return isGraphEnabled() && mxClient.IS_SVG;
+			};
 		}
 		
 		editorUi.actions.put('exportXml', new Action(mxResources.get('formatXml') + '...', function()
@@ -318,7 +324,7 @@
 				if (editorUi.pdfPageExport && !noPages)
 				{
 					var allPages = editorUi.addRadiobox(div, 'pages', mxResources.get('allPages'), true);
-					var currentPage = editorUi.addRadiobox(div, 'pages', mxResources.get('currentPage', null, 'Current Page'), false);
+					var currentPage = editorUi.addRadiobox(div, 'pages', mxResources.get('currentPage'), false);
 					var selection = editorUi.addRadiobox(div, 'pages', mxResources.get('selectionOnly'), false, graph.isSelectionEmpty());
 					var crop = editorUi.addCheckbox(div, mxResources.get('crop'), false, true);
 					var grid = editorUi.addCheckbox(div, mxResources.get('grid'), false, false);
@@ -707,7 +713,7 @@
 		editorUi.actions.addAction('feedback...', function()
 		{
 			var dlg = new FeedbackDialog(editorUi);
-			editorUi.showDialog(dlg.container, 610, 360, true, true);
+			editorUi.showDialog(dlg.container, 610, 360, true, false);
 			dlg.init();
 		});
 
@@ -1345,8 +1351,7 @@
 							req.setRequestHeaders = function(request)
 							{
 								mxXmlRequest.prototype.setRequestHeaders.apply(this, arguments);
-								var token = gapi.auth.getToken().access_token;
-								request.setRequestHeader('authorization', 'Bearer ' + token);	
+								request.setRequestHeader('authorization', 'Bearer ' + editorUi.drive.token);	
 							};
 							
 							req.send(function(req)
